@@ -1,0 +1,5 @@
+{
+  "name": "QuestLog: Gamified Task Manager",
+  "description": "A videogame-themed task management site that turns daily tasks and long-term goals into adventure-filled quests. Features a Gemini-powered chatbot to help you forge your path to success.",
+  "requestFramePermissions": []
+}

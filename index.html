@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuestForge: Gamified Task Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Inter:wght@400;500;600;700&family=Bungee&family=Orbitron:wght@400;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+      :root, html[data-theme='dark-fantasy'] {
+        --color-background-primary-rgb: 17, 24, 39; /* gray-900 */
+        --color-background-secondary-rgb: 0, 0, 0;
+        --color-text-primary-rgb: 255, 255, 255;
+        --color-text-secondary-rgb: 209, 213, 219; /* gray-300 */
+        --color-text-muted-rgb: 107, 114, 128; /* gray-500 */
+        --color-accent-primary-rgb: 252, 211, 77; /* yellow-300 */
+        --color-accent-secondary-rgb: 251, 191, 36; /* yellow-400 */
+        --color-accent-tertiary-rgb: 110, 231, 183; /* green-300 */
+        --color-accent-quaternary-rgb: 103, 232, 249; /* cyan-300 */
+        --color-border-primary-rgb: 168, 85, 247;
+        --color-interactive-primary-rgb: 139, 92, 246; /* purple-600 */
+        --color-interactive-secondary-rgb: 34, 197, 94; /* green-600 */
+        --color-interactive-user-rgb: 37, 99, 235; /* blue-600 */
+        --font-primary: 'Inter', sans-serif;
+        --font-display: 'MedievalSharp', cursive;
+        --background-image: url('https://www.transparenttextures.com/patterns/dark-matter.png');
+      }
+
+      html[data-theme='cyberpunk'] {
+        --color-background-primary-rgb: 13, 2, 33;
+        --color-background-secondary-rgb: 0, 0, 0;
+        --color-text-primary-rgb: 255, 255, 255;
+        --color-text-secondary-rgb: 224, 224, 224;
+        --color-text-muted-rgb: 128, 128, 128;
+        --color-accent-primary-rgb: 255, 0, 229; /* magenta */
+        --color-accent-secondary-rgb: 255, 107, 241;
+        --color-accent-tertiary-rgb: 0, 255, 0; /* lime green */
+        --color-accent-quaternary-rgb: 0, 246, 255; /* cyan */
+        --color-border-primary-rgb: 0, 246, 255;
+        --color-interactive-primary-rgb: 0, 246, 255;
+        --color-interactive-secondary-rgb: 0, 255, 0;
+        --color-interactive-user-rgb: 255, 0, 229;
+        --font-primary: 'Roboto Mono', monospace;
+        --font-display: 'Bungee', cursive;
+        --background-image: url('https://www.transparenttextures.com/patterns/hexellence.png');
+      }
+
+       html[data-theme='space'] {
+        --color-background-primary-rgb: 12, 20, 69;
+        --color-background-secondary-rgb: 0, 0, 0;
+        --color-text-primary-rgb: 240, 248, 255; /* aliceblue */
+        --color-text-secondary-rgb: 192, 207, 221;
+        --color-text-muted-rgb: 135, 153, 168;
+        --color-accent-primary-rgb: 240, 248, 255;
+        --color-accent-secondary-rgb: 255, 255, 255;
+        --color-accent-tertiary-rgb: 111, 231, 183;
+        --color-accent-quaternary-rgb: 135, 206, 235; /* skyblue */
+        --color-border-primary-rgb: 135, 206, 235;
+        --color-interactive-primary-rgb: 90, 103, 216; /* indigo-500 */
+        --color-interactive-secondary-rgb: 22, 163, 74; /* green-600 */
+        --color-interactive-user-rgb: 60, 130, 246;
+        --font-primary: 'Inter', sans-serif;
+        --font-display: 'Orbitron', sans-serif;
+        --background-image: url('https://www.transparenttextures.com/patterns/stardust.png');
+      }
+      
+      html[data-theme='scifi'] {
+        --color-background-primary-rgb: 224, 229, 240;
+        --color-background-secondary-rgb: 255, 255, 255;
+        --color-text-primary-rgb: 26, 32, 44;
+        --color-text-secondary-rgb: 74, 85, 104;
+        --color-text-muted-rgb: 113, 128, 150;
+        --color-accent-primary-rgb: 66, 153, 225; /* blue-500 */
+        --color-accent-secondary-rgb: 49, 130, 206; /* blue-600 */
+        --color-accent-tertiary-rgb: 56, 161, 105; /* green-500 */
+        --color-accent-quaternary-rgb: 49, 151, 149; /* teal-500 */
+        --color-border-primary-rgb: 66, 153, 225;
+        --color-interactive-primary-rgb: 49, 130, 206;
+        --color-interactive-secondary-rgb: 56, 161, 105;
+        --color-interactive-user-rgb: 66, 153, 225;
+        --font-primary: 'Inter', sans-serif;
+        --font-display: 'Orbitron', sans-serif;
+        --background-image: url('https://www.transparenttextures.com/patterns/light-wire-left.png');
+      }
+
+      body {
+        font-family: var(--font-primary);
+        background-color: rgb(var(--color-background-primary-rgb));
+        color: rgb(var(--color-text-primary-rgb));
+      }
+
+      .font-display {
+        font-family: var(--font-display);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
