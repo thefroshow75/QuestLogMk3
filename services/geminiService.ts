@@ -1,29 +1,54 @@
 import { GoogleGenAI, Chat, Type } from "@google/genai";
-import { Quest, ScheduleSuggestion, DailyBriefingItem, ChatMessage } from '../types';
+import { Quest, ScheduleSuggestion, DailyBriefingItem, ChatMessage, QuestType, RepeatFrequency, Personality } from '../types';
+import { personalities } from '../data/personalities';
 
 let chat: Chat | null = null;
+let currentPersonalityId: string | null = null;
 
-const getChat = () => {
+const getChat = (personality: Personality) => {
+    // If personality changed, reset chat to apply new system instruction
+    if (chat && currentPersonalityId !== personality.id) {
+        chat = null;
+    }
+
     if (!chat) {
         if (!process.env.API_KEY) {
             throw new Error("API_KEY environment variable not set");
         }
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        // Base prompt + JSON rules
+        const formattingRules = `
+When a user discusses a goal, ambition, or a routine, you must identify if it's a one-time task or a recurring one.
+
+1.  **For One-Time Quests**: If a user mentions a specific, singular task (e.g., "I need to finish my project presentation"), create a standard quest.
+    The JSON format MUST be: \`{"type": "quest", "questType": "ONCE", "title": "...", "description": "...", "xp": ..., "dueDate": "...", "tags": ["..."]}\`.
+    - 'dueDate' is optional. Use 'YYYY-MM-DD' format if a date is mentioned.
+
+2.  **For Recurring Quests**: If a user mentions a task that repeats (e.g., "I want to go to the gym on Mondays and Fridays", "I have to do laundry every week", "I need to study every day"), create a recurring quest.
+    The JSON format MUST be: \`{"type": "quest", "questType": "RECURRING", "title": "...", "description": "...", "xp": ..., "startDate": "...", "endDate": "...", "repeatFrequency": "...", "repeatDays": [...]}\`.
+    - 'questType' MUST be "RECURRING".
+    - 'startDate' is the start date in 'YYYY-MM-DD' format. Default to today if not specified.
+    - 'endDate' is optional.
+    - 'repeatFrequency' can be "DAILY" or "WEEKLY".
+    - 'repeatDays' is an array of numbers (0=Sunday, 1=Monday... 6=Saturday). For "DAILY", this array can be omitted or empty. For "WEEKLY", it should contain the specific days.
+
+**General Rules**:
+-   First, respond with a short, motivational sentence matching your persona.
+-   Then, on a new line, you MUST provide the quest in the specific JSON format. The JSON should be the last part of your response.
+-   'title' should be a clear task name.
+-   'description' should be a brief explanation.
+-   'xp' should be an integer between 10 and 100.
+-   'tags' is an optional array of lowercase strings.
+-   If the user is just chatting or unsure, respond as a supportive coach without generating JSON.`;
+
         chat = ai.chats.create({
             model: 'gemini-2.5-flash',
             config: {
-                systemInstruction: `You are 'Forge', a personal AI life coach and motivational planner. Your primary role is to help users define, break down, and act upon their real-life goals. You are encouraging, insightful, and always focused on actionable steps.
-        When a user discusses a goal, an ambition, or even a vague desire (e.g., "I want to be healthier," "I should learn to code"), your job is to help them brainstorm and then turn those ideas into concrete, manageable tasks, which we'll call 'Quests'.
-        When you identify a clear, actionable task from the conversation, first respond with a short, motivational, and encouraging sentence. Then, on a new line, you MUST provide the quest in the specific JSON format. The JSON should be the last part of your response.
-        The JSON format MUST be: {"type": "quest", "title": "...", "description": "...", "xp": ..., "dueDate": "...", "tags": ["..."]}.
-        - 'title' should be a clear and concise task name (e.g., "Complete First Chapter of Python Course", "30-Minute Morning Jog", "Draft Project Outline").
-        - 'description' should be a brief, clear explanation of the task.
-        - 'xp' should be an integer between 10 and 100, representing the effort or importance of the task.
-        - 'dueDate' is optional. If the user mentions a date or timeline, include it in 'YYYY-MM-DD' format.
-        - 'tags' is an optional array of short, relevant, lowercase string tags (e.g., ["fitness", "learning", "work"]).
-        If the user is just chatting, feeling unmotivated, or unsure where to start, respond as a supportive coach. Ask clarifying questions, offer encouragement, and help them explore their goals until a concrete step emerges. Only generate the quest JSON when a specific task is ready to be assigned.`,
+                systemInstruction: `${personality.systemInstruction}\n\n${formattingRules}`,
             },
         });
+        currentPersonalityId = personality.id;
     }
     return chat;
 }
@@ -35,37 +60,52 @@ const parseQuestFromText = (text: string): Omit<Quest, 'id' | 'status'> | null =
         
         const potentialJson = text.substring(jsonStartIndex, text.lastIndexOf('}') + 1);
         const parsedJson = JSON.parse(potentialJson);
+
         if (parsedJson.type === 'quest' && parsedJson.title && parsedJson.description && typeof parsedJson.xp === 'number') {
-            const quest: Omit<Quest, 'id' | 'status'> = {
+            const questType = parsedJson.questType === 'RECURRING' ? QuestType.RECURRING : QuestType.ONCE;
+
+            const baseQuest = {
                 title: parsedJson.title,
                 description: parsedJson.description,
                 xp: parsedJson.xp,
+                type: questType,
+                tags: Array.isArray(parsedJson.tags) ? parsedJson.tags.filter((t: any) => typeof t === 'string') : [],
             };
-            if(parsedJson.dueDate) {
-                quest.dueDate = parsedJson.dueDate;
+
+            if (questType === QuestType.RECURRING) {
+                return {
+                    ...baseQuest,
+                    startDate: parsedJson.startDate || new Date().toISOString().split('T')[0],
+                    endDate: parsedJson.endDate,
+                    repeatFrequency: parsedJson.repeatFrequency === 'DAILY' ? RepeatFrequency.DAILY : RepeatFrequency.WEEKLY,
+                    repeatDays: Array.isArray(parsedJson.repeatDays) ? parsedJson.repeatDays.filter((d: any) => typeof d === 'number' && d >= 0 && d <= 6) : [],
+                };
+            } else {
+                return {
+                    ...baseQuest,
+                    dueDate: parsedJson.dueDate,
+                };
             }
-            if(Array.isArray(parsedJson.tags)) {
-                quest.tags = parsedJson.tags.filter((t: any) => typeof t === 'string');
-            }
-            return quest;
         }
     } catch (e) {
-        // Not a valid quest JSON
+        console.error("Error parsing quest from text:", e);
     }
     return null;
 }
 
 export const generateQuestFromChat = async (
-    message: string
+    message: string,
+    personalityId: string = 'forge_default'
 ): Promise<{ textResponse: string; quest: Omit<Quest, 'id' | 'status'> | null }> => {
     try {
-        const chatSession = getChat();
+        const personality = personalities.find(p => p.id === personalityId) || personalities[0];
+        const chatSession = getChat(personality);
+        
         const response = await chatSession.sendMessage({ message });
         const rawText = response.text;
 
         const quest = parseQuestFromText(rawText);
         
-        // The text response is everything before the JSON object, or the full text if no quest is found.
         const jsonStartIndex = rawText.indexOf('{');
         const textResponse = (quest && jsonStartIndex > 0) ? rawText.substring(0, jsonStartIndex).trim() : rawText;
         
@@ -81,6 +121,7 @@ export const generateBatchSuggestions = async (
     filter: 'active' | 'completed' | 'today' | 'selected_day',
     chatHistory: ChatMessage[],
     selectedDate?: string,
+    numberOfSuggestions = 3,
 ): Promise<Omit<Quest, 'id' | 'status'>[] | null> => {
     try {
         if (!process.env.API_KEY) {
@@ -93,21 +134,21 @@ export const generateBatchSuggestions = async (
         let contextMessage: string;
         switch (filter) {
             case 'active':
-                contextMessage = "Based on these currently active quests, suggest three new quests that are logical next steps or similar in theme.";
+                contextMessage = `Based on these currently active quests, suggest ${numberOfSuggestions} new quests that are logical next steps or similar in theme.`;
                 break;
             case 'completed':
-                contextMessage = "Based on these recently completed quests, suggest three new quests that the user might enjoy.";
+                contextMessage = `Based on these recently completed quests, suggest ${numberOfSuggestions} new quests that the user might enjoy.`;
                 break;
             case 'today':
-                 contextMessage = "Based on the quests scheduled for today, suggest three small, quick, and easy quests that could also be accomplished today without much effort.";
+                 contextMessage = `Based on the quests scheduled for today, suggest ${numberOfSuggestions} small, quick, and easy quests that could also be accomplished today without much effort.`;
                 break;
             case 'selected_day':
                 const date = selectedDate ? new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) : 'the selected day';
-                contextMessage = `Based on the quests scheduled for ${date}, suggest three small, quick quests that could also be accomplished on that day.`;
+                contextMessage = `Based on the quests scheduled for ${date}, suggest ${numberOfSuggestions} small, quick quests that could also be accomplished on that day.`;
                 break;
         }
 
-        const prompt = `You are a motivational AI assistant. Your task is to suggest three new quests.
+        const prompt = `You are a motivational AI assistant. Your task is to suggest ${numberOfSuggestions} new one-time quests.
         
         IMPORTANT: Prioritize topics and goals from the user's recent conversation. This is the most important context.
         Recent Conversation:
@@ -120,8 +161,9 @@ export const generateBatchSuggestions = async (
         Existing Quests:
         ${JSON.stringify(contextQuests.map(q => ({ title: q.title, description: q.description, tags: q.tags })))}
 
-        Your response MUST be a JSON object containing a "quests" array, with exactly three quest objects.
-        Each quest object MUST have "title", "description", "xp", and "tags" properties.
+        Your response MUST be a JSON object containing a "quests" array, with exactly ${numberOfSuggestions} quest objects.
+        Each quest object MUST have "title", "description", "xp", "tags", and "type" properties.
+        - 'type' MUST always be 'ONCE'.
         - 'title' should be an actionable task.
         - 'xp' should be an integer between 10 and 100.
         - 'tags' should be an array of strings.`;
@@ -142,9 +184,10 @@ export const generateBatchSuggestions = async (
                                     title: { type: Type.STRING },
                                     description: { type: Type.STRING },
                                     xp: { type: Type.INTEGER },
-                                    tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+                                    tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    type: { type: Type.STRING, enum: ['ONCE'] }
                                 },
-                                required: ["title", "description", "xp"]
+                                required: ["title", "description", "xp", "type"]
                             }
                         }
                     },
@@ -161,6 +204,137 @@ export const generateBatchSuggestions = async (
 
     } catch (error) {
         console.error("Error generating batch suggestions from Gemini API:", error);
+        return null;
+    }
+};
+
+export const generateDailyQuests = async (): Promise<Omit<Quest, 'id' | 'status'>[] | null> => {
+    try {
+        if (!process.env.API_KEY) {
+            throw new Error("API_KEY environment variable not set");
+        }
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const prompt = `Generate exactly 3 diverse, simple daily quests.
+        - One quest should be for health/wellness (e.g., stretching, short walk, hydration).
+        - One quest for productivity/learning (e.g., read an article, plan the day, tidy workspace).
+        - One quest for mindfulness/creativity (e.g., listen to a song without distractions, 5-minute meditation, sketch something).
+        
+        They must be achievable in 30 minutes or less.
+        
+        Your response MUST be a JSON object containing a "quests" array with exactly 3 quest objects.
+        Each quest object MUST have "title", "description", "xp", "tags", and "type" properties.
+        - 'xp' should be a small integer between 10 and 30.
+        - 'type' must be 'ONCE'.
+        - 'tags' must include 'daily' and another relevant tag (e.g., 'health').`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        quests: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    description: { type: Type.STRING },
+                                    xp: { type: Type.INTEGER },
+                                    tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    type: { type: Type.STRING, enum: ['ONCE'] }
+                                },
+                                required: ["title", "description", "xp", "type", "tags"]
+                            }
+                        }
+                    },
+                    required: ["quests"],
+                },
+            },
+        });
+        const result = JSON.parse(response.text);
+        if (result.quests && Array.isArray(result.quests) && result.quests.length === 3) {
+            return result.quests as Omit<Quest, 'id' | 'status'>[];
+        }
+        return null;
+    } catch (error) {
+        console.error("Error generating daily quests from Gemini API:", error);
+        return null;
+    }
+}
+
+
+export const generateDailyIdeas = async (
+    date: string,
+    unscheduledQuests: Quest[],
+    scheduledQuests: Quest[],
+): Promise<Omit<Quest, 'id' | 'status'>[] | null> => {
+     try {
+        if (!process.env.API_KEY) {
+            throw new Error("API_KEY environment variable not set");
+        }
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+        const prompt = `You are an intelligent daily planner. Your task is to suggest three actionable ideas for today, ${formattedDate}.
+        
+        Consider the user's unscheduled quests and suggest one that fits well for today.
+        Also, suggest one or two other fun, healthy, or productive activities.
+        Avoid suggesting quests that are already scheduled for today.
+
+        Unscheduled Quests:
+        ${unscheduledQuests.length > 0 ? JSON.stringify(unscheduledQuests.map(q => ({ title: q.title, description: q.description }))) : "None"}
+
+        Already Scheduled Quests for Today:
+        ${scheduledQuests.length > 0 ? JSON.stringify(scheduledQuests.map(q => ({ title: q.title }))) : "None"}
+
+        Your response MUST be a JSON object containing a "quests" array, with exactly three quest objects.
+        Each quest object MUST have "title", "description", "xp", "tags", and "type" properties.
+        - 'type' MUST always be 'ONCE'.
+        - 'dueDate' MUST be set to '${date}'.
+        - 'title' should be a creative and engaging task name.
+        - 'description' should be a brief, motivational explanation.
+        - 'xp' should be an integer between 10 and 50.
+        - 'tags' should be an array of relevant strings (e.g., ["idea", "fun", "health"]).`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        quests: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    description: { type: Type.STRING },
+                                    xp: { type: Type.INTEGER },
+                                    tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                    type: { type: Type.STRING, enum: ['ONCE'] },
+                                    dueDate: { type: Type.STRING }
+                                },
+                                required: ["title", "description", "xp", "type", "dueDate"]
+                            }
+                        }
+                    },
+                    required: ["quests"],
+                },
+            },
+        });
+        const result = JSON.parse(response.text);
+        if (result.quests && Array.isArray(result.quests)) {
+            return result.quests as Omit<Quest, 'id' | 'status'>[];
+        }
+        return null;
+
+    } catch (error) {
+        console.error("Error generating daily ideas from Gemini API:", error);
         return null;
     }
 };

@@ -2,8 +2,9 @@ import React from 'react';
 import { ChatIcon } from './icons/ChatIcon';
 import { CalendarIcon } from './icons/CalendarIcon';
 import { QuestBoardIcon } from './icons/QuestBoardIcon';
+import { ArchiveBoxIcon } from './icons/ArchiveBoxIcon';
 
-type MobileView = 'quests' | 'calendar' | 'chat';
+type MobileView = 'quests' | 'calendar' | 'chat' | 'workspace';
 
 interface MobileNavProps {
     currentView: MobileView;
@@ -18,7 +19,7 @@ const NavButton: React.FC<{
 }> = ({ label, isActive, onClick, children }) => (
     <button
         onClick={onClick}
-        className={`flex flex-col items-center justify-center w-1/3 pt-2 pb-1 transition-colors duration-200 ${isActive ? 'text-[rgb(var(--color-accent-primary-rgb))]' : 'text-[rgb(var(--color-text-muted-rgb))] hover:text-[rgb(var(--color-text-primary-rgb))]'}`}
+        className={`flex flex-col items-center justify-center w-1/4 pt-2 pb-1 transition-colors duration-200 ${isActive ? 'text-[rgb(var(--color-accent-primary-rgb))]' : 'text-[rgb(var(--color-text-muted-rgb))] hover:text-[rgb(var(--color-text-primary-rgb))]'}`}
         aria-current={isActive ? 'page' : undefined}
     >
         {children}
@@ -31,13 +32,16 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, setView }) =>
         <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-[rgba(var(--color-background-primary-rgb),0.8)] backdrop-blur-sm border-t border-[rgba(var(--color-border-primary-rgb),0.3)] shadow-lg z-40">
             <div className="flex justify-around items-stretch h-full">
                 <NavButton label="Coach" isActive={currentView === 'chat'} onClick={() => setView('chat')}>
-                    <ChatIcon className="w-7 h-7" />
+                    <ChatIcon className="w-6 h-6" />
                 </NavButton>
                 <NavButton label="Calendar" isActive={currentView === 'calendar'} onClick={() => setView('calendar')}>
-                    <CalendarIcon className="w-7 h-7" />
+                    <CalendarIcon className="w-6 h-6" />
                 </NavButton>
                 <NavButton label="Quests" isActive={currentView === 'quests'} onClick={() => setView('quests')}>
-                    <QuestBoardIcon className="w-7 h-7" />
+                    <QuestBoardIcon className="w-6 h-6" />
+                </NavButton>
+                 <NavButton label="Files" isActive={currentView === 'workspace'} onClick={() => setView('workspace')}>
+                    <ArchiveBoxIcon className="w-6 h-6" />
                 </NavButton>
             </div>
         </nav>
